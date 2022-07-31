@@ -1,0 +1,13 @@
+alembic
+asyncpg
+async-plus
+base58
+click
+databases
+fastapi
+fastapi-sqlalchemy
+psycopg2-binary
+pydantic
+starlette
+sqlalchemy
+uvicorn

@@ -1,0 +1,7 @@
+*.py[cod]
+.coverage
+.mypy_cache/
+.piptools-cache/
+/.buildts
+__pycache__/
+coverage.xml
