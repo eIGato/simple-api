@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from cryptography.fernet import Fernet
 from fastapi import (
     APIRouter,
+    Depends,
     HTTPException,
     Request,
 )
@@ -19,6 +20,8 @@ from starlette.responses import Response
 
 from app import models
 from app.core.database import utc_now
+
+from .auth import oauth2_scheme
 
 DEFAULT_LIMIT = 10
 logger = logging.getLogger(__name__)
@@ -89,8 +92,18 @@ async def read_user(request: Request, id: int):
 
 
 @users_router.patch("/{id}", response_model=User)
-async def update_user(request: Request, id: str, user_info: UserUpdateInfo):
+async def update_user(
+    request: Request,
+    id: int,
+    user_info: UserUpdateInfo,
+    token: str = Depends(oauth2_scheme),
+):
     logger.debug(f"Got request: {user_info}")
+    logger.debug(f"Got token: {token}")
+    user_id = int(await request.app.state.cache.get(f"token_{token}"))
+    logger.debug(f"Got user_id: {user_id}")
+    if user_id != id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN)
     db = request.state.db
     to_update = {
         key: getattr(user_info, key)
@@ -115,7 +128,14 @@ async def update_user(request: Request, id: str, user_info: UserUpdateInfo):
     response_class=Response,
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_user(request: Request, id: int):
+async def delete_user(
+    request: Request,
+    id: int,
+    token: str = Depends(oauth2_scheme),
+):
+    user_id = int(await request.app.state.cache.get(f"token_{token}"))
+    if user_id != id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN)
     db = request.state.db
     users = await db.execute(
         sa.select(models.User)

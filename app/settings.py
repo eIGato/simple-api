@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     db_url: str = Field(..., env="DATABASE_URL")
     debug: bool = True
     project_name: str = "Simple API"
+    redis_url: str = Field(..., env="REDIS_URL")
 
 
 settings = Settings()
