@@ -19,6 +19,10 @@ from starlette import status
 from starlette.responses import Response
 
 from app import models
+from app.core.cache import (
+    cached,
+    resets_cache,
+)
 from app.core.database import utc_now
 
 from .auth import oauth2_scheme
@@ -78,6 +82,7 @@ async def create_user(request: Request, user_info: UserUpdateInfo):
 
 
 @users_router.get("/{id}", response_model=User)
+@cached(prefix="user", significant_args=["id"])
 async def read_user(request: Request, id: int):
     db: AsyncConnection = request.state.db
     users = await db.execute(
@@ -92,6 +97,7 @@ async def read_user(request: Request, id: int):
 
 
 @users_router.patch("/{id}", response_model=User)
+@resets_cache(prefix="user", significant_args=["id"])
 async def update_user(
     request: Request,
     id: int,
@@ -128,6 +134,7 @@ async def update_user(
     response_class=Response,
     status_code=status.HTTP_204_NO_CONTENT,
 )
+@resets_cache(prefix="user", significant_args=["id"])
 async def delete_user(
     request: Request,
     id: int,
