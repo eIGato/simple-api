@@ -1,0 +1,13 @@
+-c requirements.txt
+autoflake
+black
+coverage
+flake8
+flake8-black
+flake8-isort
+isort
+mypy
+pip-tools
+pytest
+pytest-asyncio
+pytest-cov

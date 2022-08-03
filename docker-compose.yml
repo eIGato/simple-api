@@ -1,0 +1,29 @@
+version: '2.1'
+
+services:
+  app:
+    restart: always
+    build: .
+    volumes:
+      - .:/src
+      - /tmp:/tmp
+    environment:
+      - DATABASE_URL=postgresql://simple:simple@db:5432/simple
+      - PYTHONASYNCIODEBUG=1
+      - LOG_LEVEL=DEBUG
+      - REDIS_URL=redis://redis/2
+    depends_on:
+      - db
+      - redis
+    ports:
+      - 8000:80
+
+  db:
+    image: postgres:13-alpine
+    environment:
+      - POSTGRES_USER=simple
+      - POSTGRES_PASSWORD=simple
+      - POSTGRES_DB=simple
+
+  redis:
+    image: redis

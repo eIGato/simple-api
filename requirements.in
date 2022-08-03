@@ -1,0 +1,16 @@
+aioredis
+alembic
+asyncpg
+async-plus
+base58
+click
+cryptography
+databases
+fastapi
+fastapi-sqlalchemy
+psycopg2-binary
+pydantic
+python-multipart
+starlette
+sqlalchemy
+uvicorn
