@@ -1,3 +1,4 @@
+import base64
 import logging
 import typing as ty
 from datetime import datetime
@@ -5,6 +6,7 @@ from hashlib import sha256
 
 import pydantic as pydantic
 import sqlalchemy as sa
+from cryptography.fernet import Fernet
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -16,6 +18,7 @@ from starlette import status
 from starlette.responses import Response
 
 from app import models
+from app.core.database import utc_now
 
 DEFAULT_LIMIT = 10
 logger = logging.getLogger(__name__)
@@ -55,6 +58,7 @@ class UserInList(pydantic.BaseModel):
 async def create_user(request: Request, user_info: UserUpdateInfo):
     logger.debug(f"Got request: {user_info}")
     db = request.state.db
+    # TODO: Check if name and email fit in 32 chars. And other checks.
     try:
         [user] = await db.execute(
             sa.insert(models.User)
@@ -74,7 +78,9 @@ async def create_user(request: Request, user_info: UserUpdateInfo):
 async def read_user(request: Request, id: str):
     db: AsyncConnection = request.state.db
     users = await db.execute(
-        sa.select(models.User).where(models.User.id == int(id))
+        sa.select(models.User).where(
+            (models.User.id == int(id)) & (models.User.deleted_at != None)
+        )
     )
     if not users:
         raise HTTPException(404)
@@ -115,8 +121,29 @@ async def update_user(request: Request, id: str, user_info: UserUpdateInfo):
 async def delete_user(request: Request, id: str):
     db = request.state.db
     try:
+        users = await db.execute(
+            sa.select(models.User)
+            .with_for_update()
+            .where(
+                (models.User.id == int(id)) & (models.User.deleted_at != None)
+            )
+        )
+        if not users:
+            raise HTTPException(404)
+        [user] = users
+        password_hash = user["password_hash"]
+        fernet = Fernet(key=base64.b64encode(bytes.fromhex(password_hash)))
+        # Unreadable data are still recoverable with password.
+        # TODO: Add a recovery endpoint.
         await db.execute(
-            sa.delete(models.User).where(models.User.id == int(id))
+            sa.update(models.User)
+            .where(models.User.id == int(id))
+            .values(
+                deleted_at=utc_now(),
+                name=fernet.encrypt(user["name"].encode()).hex(),
+                email=fernet.encrypt(user["email"].encode()).hex(),
+                password_hash="",
+            )
         )
     except Exception as e:
         raise HTTPException(400) from e
@@ -131,6 +158,7 @@ async def list_users(
     db: AsyncConnection = request.state.db
     users = await db.execute(
         sa.select(models.User)
+        .where(models.User.deleted_at != None)
         .limit(limit if limit > 0 else DEFAULT_LIMIT)
         .offset(max(offset, 0))
     )

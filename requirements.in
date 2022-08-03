@@ -3,6 +3,7 @@ asyncpg
 async-plus
 base58
 click
+cryptography
 databases
 fastapi
 fastapi-sqlalchemy

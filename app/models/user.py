@@ -14,8 +14,8 @@ class User(Base):
     __tablename__ = "user"
 
     id: int = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
-    name: str = sa.Column(sa.String(length=15), nullable=False, unique=True)
-    email: str = sa.Column(sa.String(length=127), nullable=False, unique=True)
+    name: str = sa.Column(sa.String(length=64), nullable=False, unique=True)
+    email: str = sa.Column(sa.String(length=64), nullable=False, unique=True)
     password_hash: str = sa.Column(sa.String(length=64), nullable=False)
     created_at: datetime = sa.Column(
         sa.DateTime,
@@ -28,3 +28,4 @@ class User(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+    deleted_at: datetime = sa.Column(sa.DateTime, nullable=True)

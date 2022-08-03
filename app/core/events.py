@@ -9,7 +9,7 @@ from app.settings import settings
 def create_start_app_handler(app: FastAPI) -> ty.Callable:
     async def start_app() -> None:
         app.state.db_pool = create_async_engine(
-            settings.db_url,
+            settings.db_url.replace("postgresql://", "postgresql+asyncpg://"),
             pool_size=5,
         )
 
