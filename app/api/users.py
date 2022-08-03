@@ -75,15 +75,15 @@ async def create_user(request: Request, user_info: UserUpdateInfo):
 
 
 @users_router.get("/{id}", response_model=User)
-async def read_user(request: Request, id: str):
+async def read_user(request: Request, id: int):
     db: AsyncConnection = request.state.db
     users = await db.execute(
         sa.select(models.User).where(
-            (models.User.id == int(id)) & (models.User.deleted_at != None)
+            (models.User.id == id) & (models.User.deleted_at == None)
         )
     )
     if not users:
-        raise HTTPException(404)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     [user] = users
     return User(**user)
 
@@ -92,24 +92,21 @@ async def read_user(request: Request, id: str):
 async def update_user(request: Request, id: str, user_info: UserUpdateInfo):
     logger.debug(f"Got request: {user_info}")
     db = request.state.db
-    try:
-        to_update = {
-            key: getattr(user_info, key)
-            for key in ["name", "email"]
-            if getattr(user_info, key)
-        }
-        if user_info.password:
-            to_update["password_hash"] = sha256(
-                user_info["password"].encode()
-            ).hexdigest()
-        [user] = await db.execute(
-            sa.update(models.User)
-            .where(models.User.id == int(id))
-            .values(**to_update)
-            .returning(*models.User.__table__.c)
-        )
-    except Exception as e:
-        raise HTTPException(400) from e
+    to_update = {
+        key: getattr(user_info, key)
+        for key in ["name", "email"]
+        if getattr(user_info, key)
+    }
+    if user_info.password:
+        to_update["password_hash"] = sha256(
+            user_info.password.encode()
+        ).hexdigest()
+    [user] = await db.execute(
+        sa.update(models.User)
+        .where(models.User.id == int(id))
+        .values(**to_update)
+        .returning(*models.User.__table__.c)
+    )
     return User(**user)
 
 
@@ -118,38 +115,33 @@ async def update_user(request: Request, id: str, user_info: UserUpdateInfo):
     response_class=Response,
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_user(request: Request, id: str):
+async def delete_user(request: Request, id: int):
     db = request.state.db
-    try:
-        users = await db.execute(
-            sa.select(models.User)
-            .with_for_update()
-            .where(
-                (models.User.id == int(id)) & (models.User.deleted_at != None)
-            )
+    users = await db.execute(
+        sa.select(models.User)
+        .with_for_update()
+        .where((models.User.id == id) & (models.User.deleted_at == None))
+    )
+    if not users:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    [user] = users
+    password_hash = user["password_hash"]
+    fernet = Fernet(key=base64.b64encode(bytes.fromhex(password_hash)))
+    # Unreadable data are still recoverable with password.
+    # TODO: Add a recovery endpoint.
+    await db.execute(
+        sa.update(models.User)
+        .where(models.User.id == id)
+        .values(
+            deleted_at=utc_now(),
+            name=fernet.encrypt(user["name"].encode()).hex(),
+            email=fernet.encrypt(user["email"].encode()).hex(),
+            password_hash="",
         )
-        if not users:
-            raise HTTPException(404)
-        [user] = users
-        password_hash = user["password_hash"]
-        fernet = Fernet(key=base64.b64encode(bytes.fromhex(password_hash)))
-        # Unreadable data are still recoverable with password.
-        # TODO: Add a recovery endpoint.
-        await db.execute(
-            sa.update(models.User)
-            .where(models.User.id == int(id))
-            .values(
-                deleted_at=utc_now(),
-                name=fernet.encrypt(user["name"].encode()).hex(),
-                email=fernet.encrypt(user["email"].encode()).hex(),
-                password_hash="",
-            )
-        )
-    except Exception as e:
-        raise HTTPException(400) from e
+    )
 
 
-@users_router.get("/", response_model=list[User])
+@users_router.get("/", response_model=list[UserInList])
 async def list_users(
     request: Request,
     limit: int = DEFAULT_LIMIT,
@@ -158,8 +150,8 @@ async def list_users(
     db: AsyncConnection = request.state.db
     users = await db.execute(
         sa.select(models.User)
-        .where(models.User.deleted_at != None)
+        .where(models.User.deleted_at == None)
         .limit(limit if limit > 0 else DEFAULT_LIMIT)
         .offset(max(offset, 0))
     )
-    return list(map(UserInList, users))
+    return [UserInList(**user) for user in users]
